@@ -25,16 +25,11 @@ const config: HardhatUserConfig = {
   },
   networks: {
     hardhat: {
-      initialBaseFeePerGas: 0, // workaround from https://github.com/sc-forks/solidity-coverage/issues/652#issuecomment-896330136 . Remove when that issue is closed.
       accounts: {
         mnemonic: "test test test test test test test test test test test test",
         count: 10,
         accountsBalance: "100000000000000000000000000",
       },
-      forking: {
-        url: process.env.MAINNET_URL || "",
-      },
-      chainId: 1,
     },
   },
   typechain: {
