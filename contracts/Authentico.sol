@@ -39,29 +39,24 @@ contract Authentico is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable {
   mapping(address => EnumerableSet.UintSet) private _creatorNFTs;
   mapping(uint256 => Marketplace) private _marketplace;
 
-  uint256 public mintingPrice = 0.01 ether;
   uint256 public minPriceForSellWithFee = 0.0001 ether;
 
   // solhint-disable-next-line no-empty-blocks
   constructor() ERC721("Authentico", "ATO") {}
 
-  function mint(address to, string memory uri) public payable {
-    require(msg.value >= mintingPrice, "Transferred value is less than minting price");
+  function mint(address to, string memory uri) public {
     uint256 tokenId = _tokenIdCounter.current();
     _tokenIdCounter.increment();
     _safeMint(to, tokenId);
     _setTokenURI(tokenId, uri);
     _creatorNFTs[to].add(tokenId);
-    // transfer ETH to owner address
-    (bool success, ) = payable(owner()).call{ value: msg.value }("");
-    require(success, "Unable to send value, recipient may have reverted");
   }
 
   function mintAndSell(
     string memory uri,
     uint256 price,
     SellType sellType
-  ) public payable {
+  ) public {
     address sender = msg.sender;
     uint256 tokenId = _tokenIdCounter.current();
     mint(sender, uri);
@@ -179,10 +174,6 @@ contract Authentico is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable {
     marketplace.inSell = false;
     transferFrom(address(this), msg.sender, tokenId);
     emit RemovedFromMarketplace(tokenId, msg.sender);
-  }
-
-  function setMintngPrice(uint256 mintingPrice_) public onlyOwner {
-    mintingPrice = mintingPrice_;
   }
 
   function setMinPriceForSellWithFee(uint256 newMinPrice) public onlyOwner {
