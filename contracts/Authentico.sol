@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.10;
+pragma solidity ^0.8.11;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
@@ -12,26 +12,15 @@ contract Authentico is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable {
   using Counters for Counters.Counter;
   using EnumerableSet for EnumerableSet.UintSet;
 
-  event Sell(uint256 indexed tokenId, address indexed seller, uint256 price, SellType sellType);
-  event Selled(
-    uint256 indexed tokenId,
-    address indexed seller,
-    address indexed buyer,
-    SellType sellType
-  );
-  event Update(uint256 indexed tokenId, uint256 price, SellType sellType);
+  event Sell(uint256 indexed tokenId, address indexed seller, uint256 price);
+  event Selled(uint256 indexed tokenId, address indexed seller, address indexed buyer);
+  event Update(uint256 indexed tokenId, uint256 price);
   event RemovedFromMarketplace(uint256 indexed tokenId, address indexed seller);
   event NFTReverted(uint256 indexed tokenId, address indexed creator);
-
-  enum SellType {
-    WITHOUT_FEE,
-    WITH_FEE
-  }
 
   struct Marketplace {
     bool inSell;
     address seller;
-    SellType sellType;
     uint256 price;
   }
 
@@ -52,64 +41,44 @@ contract Authentico is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable {
     _creatorNFTs[to].add(tokenId);
   }
 
-  function mintAndSell(
-    string memory uri,
-    uint256 price,
-    SellType sellType
-  ) public {
-    address sender = msg.sender;
+  function mintAndSell(string memory uri, uint256 price) public {
     uint256 tokenId = _tokenIdCounter.current();
-    mint(sender, uri);
-    _transfer(sender, address(this), tokenId);
-    sell(tokenId, price, sellType);
+    mint(_msgSender(), uri);
+    sell(tokenId, price);
   }
 
-  function sell(
-    uint256 tokenId,
-    uint256 price,
-    SellType sellType
-  ) public {
-    address sender = msg.sender;
+  function sell(uint256 tokenId, uint256 price) public {
+    address seller = _msgSender();
     Marketplace storage marketplace = _marketplace[tokenId];
-    require(ownerOf(tokenId) == sender, "Transfer caller is not owner");
+    require(ownerOf(tokenId) == seller, "Transfer caller is not owner");
     require(!marketplace.inSell, "Item is already on sell");
-    if (sellType == SellType.WITH_FEE) {
-      require(
-        price >= minPriceForSellWithFee,
-        "You should set price more than minPriceForSellWithFee"
-      );
-    }
-    transferFrom(sender, address(this), tokenId);
+    require(
+      price >= minPriceForSellWithFee,
+      "You should set price more than minPriceForSellWithFee"
+    );
     marketplace.inSell = true;
-    marketplace.seller = sender;
+    marketplace.seller = seller;
     marketplace.price = price;
-    marketplace.sellType = sellType;
-    emit Sell(tokenId, sender, price, sellType);
+    emit Sell(tokenId, seller, price);
   }
 
   function buy(uint256 tokenId) public payable {
     uint256 gasBefore = gasleft();
-    address buyer = msg.sender;
+    address buyer = _msgSender();
     Marketplace storage marketplace = _marketplace[tokenId];
     require(marketplace.inSell, "Item is not for sale");
     uint256 value = msg.value;
     require(value >= marketplace.price, "Transferred value is less than token price");
-    transferFrom(address(this), buyer, tokenId);
-    marketplace.inSell = false;
     address seller = marketplace.seller;
-    if (marketplace.sellType == SellType.WITH_FEE) {
-      uint256 gasCost = gasBefore - gasleft();
-      uint256 sellerTransfer = value - gasCost - 50000;
-      (bool success, ) = payable(seller).call{ value: sellerTransfer }("");
-      require(success, "Unable to send value, recipient may have reverted");
-      (success, ) = payable(buyer).call{ value: value - sellerTransfer }("");
-      require(success, "Unable to send value, recipient may have reverted");
-    } else {
-      (bool success, ) = payable(seller).call{ value: value }("");
-      require(success, "Unable to send value, recipient may have reverted");
-    }
-
-    emit Selled(tokenId, seller, buyer, marketplace.sellType);
+    _transfer(seller, buyer, tokenId);
+    marketplace.inSell = false;
+    uint256 gasCost = gasBefore - gasleft();
+    uint256 sellerTransfer = value - gasCost - 50000;
+    (bool success, ) = payable(seller).call{ value: sellerTransfer }("");
+    require(success, "Unable to send value, recipient may have reverted");
+    (success, ) = payable(buyer).call{ value: value - sellerTransfer }("");
+    require(success, "Unable to send value, recipient may have reverted");
+    emit Selled(tokenId, seller, buyer);
   }
 
   function updatePrice(uint256 tokenId, uint256 newPrice) public {
@@ -117,63 +86,21 @@ contract Authentico is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable {
     uint256 oldPrice = marketplace.price;
     require(marketplace.inSell, "Item is not for sale");
     require(oldPrice != newPrice, "Given price is equal to previous price");
-    require(marketplace.seller == msg.sender, "You are not a seller of token");
-    if (marketplace.sellType == SellType.WITH_FEE) {
-      require(
-        newPrice >= minPriceForSellWithFee,
-        "You should set price more than minPriceForSellWithFee"
-      );
-    }
+    require(marketplace.seller == _msgSender(), "You are not a seller of token");
+    require(
+      newPrice >= minPriceForSellWithFee,
+      "You should set price more than minPriceForSellWithFee"
+    );
     marketplace.price = newPrice;
-    emit Update(tokenId, newPrice, marketplace.sellType);
-  }
-
-  function updateSellType(uint256 tokenId, SellType newSellType) public {
-    Marketplace storage marketplace = _marketplace[tokenId];
-    SellType oldSellType = marketplace.sellType;
-    require(marketplace.inSell, "Item is not for sale");
-    require(oldSellType != newSellType, "Given sellType is already setted");
-    require(marketplace.seller == msg.sender, "You are not a seller of token");
-    if (newSellType == SellType.WITH_FEE) {
-      require(
-        marketplace.price >= minPriceForSellWithFee,
-        "You cannot change sellType because token price is less than minimum required"
-      );
-    }
-    marketplace.sellType = newSellType;
-    emit Update(tokenId, marketplace.price, newSellType);
-  }
-
-  function updatePriceAndSellType(
-    uint256 tokenId,
-    uint256 newPrice,
-    SellType newSellType
-  ) public {
-    Marketplace storage marketplace = _marketplace[tokenId];
-    uint256 oldPrice = marketplace.price;
-    SellType oldSellType = marketplace.sellType;
-    require(marketplace.inSell, "Item is not for sale");
-    require(oldPrice != newPrice, "Given price is equal to previous price");
-    require(oldSellType != newSellType, "Given sellType is already setted");
-    require(marketplace.seller == msg.sender, "You are not a seller of token");
-    if (marketplace.sellType == SellType.WITH_FEE) {
-      require(
-        newPrice >= minPriceForSellWithFee,
-        "You should set price more than minPriceForSellWithFee"
-      );
-    }
-    marketplace.price = newPrice;
-    marketplace.sellType = newSellType;
-    emit Update(tokenId, newPrice, newSellType);
+    emit Update(tokenId, newPrice);
   }
 
   function removeFromMarketplace(uint256 tokenId) public {
     Marketplace storage marketplace = _marketplace[tokenId];
     require(marketplace.inSell, "Item is not for sale");
-    require(marketplace.seller == msg.sender, "You are not a seller of token");
+    require(marketplace.seller == _msgSender(), "You are not a seller of token");
     marketplace.inSell = false;
-    transferFrom(address(this), msg.sender, tokenId);
-    emit RemovedFromMarketplace(tokenId, msg.sender);
+    emit RemovedFromMarketplace(tokenId, _msgSender());
   }
 
   function setMinPriceForSellWithFee(uint256 newMinPrice) public onlyOwner {
@@ -181,7 +108,7 @@ contract Authentico is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable {
   }
 
   function revertNFT(uint256 tokenId) public {
-    address creator = msg.sender;
+    address creator = _msgSender();
     require(_creatorNFTs[creator].contains(tokenId), "You are not creator of NFT");
     address tokenOwner = ownerOf(tokenId);
     require(tokenOwner != creator, "You are already owner of NFT");
@@ -201,6 +128,7 @@ contract Authentico is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable {
   function tokenInfo(uint256 tokenId) public view returns (Marketplace memory) {
     require(_exists(tokenId), "Token with this ID does not exist");
     require(_marketplace[tokenId].inSell, "Token with this ID is not for sale");
+
     return _marketplace[tokenId];
   }
 
@@ -216,6 +144,9 @@ contract Authentico is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable {
     uint256 tokenId
   ) internal override(ERC721, ERC721Enumerable) {
     super._beforeTokenTransfer(from, to, tokenId);
+    if (_marketplace[tokenId].inSell) {
+      _marketplace[tokenId].inSell = false;
+    }
   }
 
   function _burn(uint256 tokenId) internal override(ERC721, ERC721URIStorage) {

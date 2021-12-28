@@ -13,11 +13,11 @@ const config: HardhatUserConfig = {
   solidity: {
     compilers: [
       {
-        version: "0.8.10",
+        version: "0.8.11",
         settings: {
           optimizer: {
             enabled: true,
-            runs: 200,
+            runs: 10000,
           },
         },
       },
@@ -31,10 +31,17 @@ const config: HardhatUserConfig = {
         accountsBalance: "100000000000000000000000000",
       },
     },
+    bscTestnet: {
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : undefined,
+      url: process.env.BINANCE_TESTNET_RPC
+    }
   },
   typechain: {
     target: "truffle-v5",
     alwaysGenerateOverloads: true,
+  },
+  etherscan: {
+    apiKey: process.env.ETHERSCAN_API_KEY,
   },
 };
 
