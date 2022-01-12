@@ -28,7 +28,7 @@ contract Authentico is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable {
   mapping(address => EnumerableSet.UintSet) private _creatorNFTs;
   mapping(uint256 => Marketplace) private _marketplace;
 
-  uint256 public minPriceForSellWithFee = 0.0001 ether;
+  uint256 public minPriceForSellWithFee = 0.0007 ether;
 
   // solhint-disable-next-line no-empty-blocks
   constructor() ERC721("Authentico", "ATO") {}
