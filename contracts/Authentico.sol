@@ -73,7 +73,7 @@ contract Authentico is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable {
     _transfer(seller, buyer, tokenId);
     marketplace.inSell = false;
     uint256 gasCost = gasBefore - gasleft();
-    uint256 sellerTransfer = value - gasCost - 50000;
+    uint256 sellerTransfer = value - ((gasCost + 50000) * 5 gwei);
     (bool success, ) = payable(seller).call{ value: sellerTransfer }("");
     require(success, "Unable to send value, recipient may have reverted");
     (success, ) = payable(buyer).call{ value: value - sellerTransfer }("");
